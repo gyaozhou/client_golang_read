@@ -43,6 +43,8 @@ type MetricVec struct {
 	hashAddByte func(h uint64, b byte) uint64
 }
 
+// zhou: README,
+
 // NewMetricVec returns an initialized metricVec.
 func NewMetricVec(desc *Desc, newMetric func(lvs ...string) Metric) *MetricVec {
 	return &MetricVec{
@@ -311,6 +313,8 @@ type metricMap struct {
 func (m *metricMap) Describe(ch chan<- *Desc) {
 	ch <- m.desc
 }
+
+// zhou: README,
 
 // Collect implements Collector.
 func (m *metricMap) Collect(ch chan<- Metric) {

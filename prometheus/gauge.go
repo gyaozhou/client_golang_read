@@ -55,6 +55,8 @@ type Gauge interface {
 // GaugeOpts is an alias for Opts. See there for doc comments.
 type GaugeOpts Opts
 
+// zhou: README,
+
 // NewGauge creates a new Gauge based on the provided GaugeOpts.
 //
 // The returned implementation is optimized for a fast Set method. If you have a

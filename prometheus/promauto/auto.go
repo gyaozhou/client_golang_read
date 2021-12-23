@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// zhou: README,
+
 // Package promauto provides alternative constructors for the fundamental
 // Prometheus metric types and their …Vec and …Func variants. The difference to
 // their counterparts in the prometheus package is that the promauto
@@ -256,6 +258,8 @@ type Factory struct {
 // created Collectors. If the provided Registerer is nil, the returned Factory
 // creates Collectors that are not registered with any Registerer.
 func With(r prometheus.Registerer) Factory { return Factory{r} }
+
+// zhou: register automatically, wrapper of package prometheus.
 
 // NewCounter works like the function of the same name in the prometheus package
 // but it automatically registers the Counter with the Factory's Registerer.

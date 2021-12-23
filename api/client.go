@@ -66,6 +66,7 @@ func (cfg *Config) client() http.Client {
 	return *cfg.Client
 }
 
+// zhou: can't provide both client.
 func (cfg *Config) validate() error {
 	if cfg.Client != nil && cfg.RoundTripper != nil {
 		return errors.New("api.Config.RoundTripper and api.Config.Client are mutually exclusive")
@@ -78,6 +79,8 @@ type Client interface {
 	URL(ep string, args map[string]string) *url.URL
 	Do(context.Context, *http.Request) (*http.Response, []byte, error)
 }
+
+// zhou:
 
 // NewClient returns a new Client.
 //

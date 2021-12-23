@@ -749,6 +749,7 @@ humidity_percent{location="inside"} 33.2
 # HELP temperature_kelvin Temperature in Kelvin.
 temperature_kelvin{location="somewhere else"} 4.5
 `
+	// zhou: decode the exposition format
 
 	parseText := func() ([]*dto.MetricFamily, error) {
 		parsed, err := parser.TextToMetricFamilies(strings.NewReader(text))

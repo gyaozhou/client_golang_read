@@ -41,6 +41,8 @@ const (
 	capDescChan   = 10
 )
 
+// zhou: README,
+
 // DefaultRegisterer and DefaultGatherer are the implementations of the
 // Registerer and Gatherer interface a number of convenience functions in this
 // package act on. Initially, both variables point to the same Registry, which
@@ -59,9 +61,13 @@ var (
 )
 
 func init() {
+	// zhou: auto collect proformance ???
 	MustRegister(NewProcessCollector(ProcessCollectorOpts{}))
+	// zhou: auto collect Go related metrics in default registry.
 	MustRegister(NewGoCollector())
 }
+
+// zhou: create a new registry.
 
 // NewRegistry creates a new vanilla Registry without any Collectors
 // pre-registered.
@@ -88,6 +94,8 @@ func NewPedanticRegistry() *Registry {
 	r.pedanticChecksEnabled = true
 	return r
 }
+
+// zhou: README,
 
 // Registerer is the interface for the part of a registry in charge of
 // registering and unregistering. Users of custom registries should use
@@ -134,6 +142,8 @@ type Registerer interface {
 	Unregister(Collector) bool
 }
 
+// zhou: README,
+
 // Gatherer is the interface for the part of a registry in charge of gathering
 // the collected metrics into a number of MetricFamilies. The Gatherer interface
 // comes with the same general implication as described for the Registerer
@@ -168,6 +178,8 @@ type Gatherer interface {
 func Register(c Collector) error {
 	return DefaultRegisterer.Register(c)
 }
+
+// zhou: README,
 
 // MustRegister registers the provided Collectors with the DefaultRegisterer and
 // panics if any error occurs.
@@ -251,39 +263,77 @@ func (errs MultiError) MaybeUnwrap() error {
 	}
 }
 
+// zhou: README,
+
 // Registry registers Prometheus collectors, collects their metrics, and gathers
 // them into MetricFamilies for exposition. It implements both Registerer and
 // Gatherer. The zero value is not usable. Create instances with NewRegistry or
 // NewPedanticRegistry.
 type Registry struct {
-	mtx                   sync.RWMutex
-	collectorsByID        map[uint64]Collector // ID is a hash of the descIDs.
-	descIDs               map[uint64]struct{}
-	dimHashesByName       map[string]uint64
+	// zhou: this RWMutex is used to protect Read/Write of this struct.
+	mtx sync.RWMutex
+	// zhou: collector id looks like the CRC of all desc id.
+	collectorsByID map[uint64]Collector // ID is a hash of the descIDs.
+	// zhou: "Desc.id" == "fqName" + constLabels' value
+	descIDs map[uint64]struct{}
+	// zhou: key is "fqName", value is "Desc.dimHash"
+	dimHashesByName map[string]uint64
+	// zhou: collector in this list doesn't provide descriptors in Describe()
 	uncheckedCollectors   []Collector
 	pedanticChecksEnabled bool
 }
 
+// zhou: check the duplication of collector's all metric desc.
+//       It is not mandatory for collect to provide Desc via Describe().
+
 // Register implements Registerer.
 func (r *Registry) Register(c Collector) error {
 	var (
-		descChan           = make(chan *Desc, capDescChan)
-		newDescIDs         = map[uint64]struct{}{}
+		// zhou: used to receive output of Desc()
+		descChan = make(chan *Desc, capDescChan)
+
+		// zhou: to avoid pollute Registry, in case only part metrics of this collector are validated.
+		//       Temporarily preserve these metrics' info of this collector into "newDescIDs" and
+		//       "newDimHashesByName".
+
+		// zhou: "descIDs" within this collector
+		newDescIDs = map[uint64]struct{}{}
+		// zhou: "dimHashesByName" within this collector
 		newDimHashesByName = map[string]uint64{}
-		collectorID        uint64 // All desc IDs XOR'd together.
-		duplicateDescErr   error
+
+		// zhou: XOR all "Desc.id" within this collector to get collector id.
+		//       collector id looks like the CRC of all desc id.
+		collectorID uint64 // All desc IDs XOR'd together.
+		// zhou:
+		duplicateDescErr error
 	)
 	go func() {
+		// zhou: immediately invoke colllector's "Describe()", used to validate they are not
+		//       duplicated and other errors.
+		//       Multiply Desc may send via this channel
 		c.Describe(descChan)
+
+		// zhou: due to "descChan" is a unbuffer channel, so the sending will block until
+		//       all data is received by reader.
 		close(descChan)
 	}()
+
+	// zhou: protect all actions until end of function, since they could write Registry.
+	//       This Register() could run in concurrent.
 	r.mtx.Lock()
+
 	defer func() {
+		// zhou: discard all messages still in channel, avoid the go routine above leak.
+
 		// Drain channel in case of premature return to not leak a goroutine.
 		for range descChan {
 		}
 		r.mtx.Unlock()
 	}()
+
+	// zhou: validate collector's Desc with other collectors in registry.
+	//       There are maybe multiply metrics within a collector.
+
 	// Conduct various tests...
 	for desc := range descChan {
 
@@ -292,11 +342,18 @@ func (r *Registry) Register(c Collector) error {
 			return fmt.Errorf("descriptor %s is invalid: %s", desc, desc.err)
 		}
 
+		// zhou: check whether the "Desc.id" is duplicated.
+		//       "Desc.id" is hash of "fqName" + constLabels' value.
+
 		// Is the descID unique?
 		// (In other words: Is the fqName + constLabel combination unique?)
 		if _, exists := r.descIDs[desc.id]; exists {
+			// zhou: why need continues handling ??? Let other metrics continue to register ?
 			duplicateDescErr = fmt.Errorf("descriptor %s already exists with the same fully-qualified name and const label values", desc)
 		}
+
+		// zhou: set in this collector's "newDescIDs", and caculate "collectorID"
+
 		// If it is not a duplicate desc in this collector, XOR it to
 		// the collectorID.  (We allow duplicate descs within the same
 		// collector, but their existence must be a no-op.)
@@ -304,6 +361,9 @@ func (r *Registry) Register(c Collector) error {
 			newDescIDs[desc.id] = struct{}{}
 			collectorID ^= desc.id
 		}
+
+		// zhou: "fqName" is allowed to duplicated, but its "dimHash" should be same.
+		//       "dimHash" == constLabels' name + variableLabels' name + help string
 
 		// Are all the label names and the help string consistent with
 		// previous descriptors of the same name?
@@ -313,6 +373,8 @@ func (r *Registry) Register(c Collector) error {
 				return fmt.Errorf("a previously registered descriptor with the same fully-qualified name as %s has different label names or a different help string", desc)
 			}
 		} else {
+			// zhou: check with previous metrics in this collector.
+
 			// ...then check the new descriptors already seen.
 			if dimHash, exists := newDimHashesByName[desc.fqName]; exists {
 				if dimHash != desc.dimHash {
@@ -322,12 +384,18 @@ func (r *Registry) Register(c Collector) error {
 				newDimHashesByName[desc.fqName] = desc.dimHash
 			}
 		}
-	}
+	} // zhou: end of read from channel
+
+	// zhou: no descriptor got from channel
+
 	// A Collector yielding no Desc at all is considered unchecked.
 	if len(newDescIDs) == 0 {
 		r.uncheckedCollectors = append(r.uncheckedCollectors, c)
 		return nil
 	}
+
+	// zhou: check whether the collector id have been registered before.
+
 	if existing, exists := r.collectorsByID[collectorID]; exists {
 		switch e := existing.(type) {
 		case *wrappingCollector:
@@ -342,11 +410,14 @@ func (r *Registry) Register(c Collector) error {
 			}
 		}
 	}
+
 	// If the collectorID is new, but at least one of the descs existed
 	// before, we are in trouble.
 	if duplicateDescErr != nil {
 		return duplicateDescErr
 	}
+
+	// zhou: all tests passed
 
 	// Only after all tests have passed, actually register.
 	r.collectorsByID[collectorID] = c
@@ -358,6 +429,8 @@ func (r *Registry) Register(c Collector) error {
 	}
 	return nil
 }
+
+// zhou: README,
 
 // Unregister implements Registerer.
 func (r *Registry) Unregister(c Collector) bool {
@@ -404,6 +477,8 @@ func (r *Registry) MustRegister(cs ...Collector) {
 		}
 	}
 }
+
+// zhou: README, invoked by HTTP server, used to gather all collectors metrics of this "Registry".
 
 // Gather implements Gatherer.
 func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
@@ -714,6 +789,8 @@ func processMetric(
 // (e.g. syntactically invalid metric or label names) will go undetected.
 type Gatherers []Gatherer
 
+// zhou: README,
+
 // Gather implements Gatherer.
 func (gs Gatherers) Gather() ([]*dto.MetricFamily, error) {
 	var (
@@ -999,6 +1076,8 @@ func (r *MultiTRegistry) Gather() (mfs []*dto.MetricFamily, done func(), err err
 		}
 	}, errs.MaybeUnwrap()
 }
+
+// zhou: README, why wrap as this interface ???
 
 // TransactionalGatherer represents transactional gatherer that can be triggered to notify gatherer that memory
 // used by metric family is no longer used by a caller. This allows implementations with cache.

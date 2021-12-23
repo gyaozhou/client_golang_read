@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// zhou: README
+
 // Package prometheus is the core instrumentation package. It provides metrics
 // primitives to instrument code for monitoring. It also offers a registry for
 // metrics. Sub-packages allow to expose the registered metrics via HTTP

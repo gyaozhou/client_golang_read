@@ -25,9 +25,11 @@ import (
 	//nolint:staticcheck // Ignore SA1019. Need to keep deprecated package for compatibility.
 	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/common/model"
-
+	// zhou: why refer it as "dto" ???
 	dto "github.com/prometheus/client_model/go"
 )
+
+// zhou: "the immutable meta-data of a Metric"
 
 // Desc is the descriptor used by every Prometheus Metric. It is essentially
 // the immutable meta-data of a Metric. The normal Metric implementations
@@ -56,18 +58,30 @@ type Desc struct {
 	// variableLabels contains names of labels for which the metric
 	// maintains variable values.
 	variableLabels []string
+
+	// zhou: "id", 	get hash of constLabels' value + "fqName".
+	//       Used to check duplicated registration of collector.
+
 	// id is a hash of the values of the ConstLabels and fqName. This
 	// must be unique among all registered descriptors and can therefore be
 	// used as an identifier of the descriptor.
 	id uint64
+
+	// zhou: get hash of constLabels' name + variableLabels' name + help string.
+	//       "Each Desc with the same fqName must have the same dimHash."
+
 	// dimHash is a hash of the label names (preset and variable) and the
 	// Help string. Each Desc with the same fqName must have the same
 	// dimHash.
 	dimHash uint64
+
 	// err is an error that occurred during construction. It is reported on
 	// registration time.
 	err error
 }
+
+// zhou: validate Desc and caculate "id" and "dimHash".
+//       Need to check "Desc.err".
 
 // NewDesc allocates and initializes a new Desc. Errors are recorded in the Desc
 // and will be reported on registration time. variableLabels and constLabels can
@@ -84,18 +98,30 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 		help:           help,
 		variableLabels: variableLabels,
 	}
+
+	// zhou: validate the metric naming rule
 	if !model.IsValidMetricName(model.LabelValue(fqName)) {
 		d.err = fmt.Errorf("%q is not a valid metric name", fqName)
 		return d
 	}
+
+	// zhou: "labelValues" contains constLabels' value and "fqName".
+	//       Then used to caculate "Desc.id".
+
 	// labelValues contains the label values of const labels (in order of
 	// their sorted label names) plus the fqName (at position 0).
 	labelValues := make([]string, 1, len(constLabels)+1)
 	labelValues[0] = fqName
+
+	// zhou: "labelNames" contains both the variablesLabels' name and constLabels' name.
 	labelNames := make([]string, 0, len(constLabels)+len(variableLabels))
+
+	// zhou: "labelNameSet" is used to check duplicated label name within variableLabels or within constLabels.
 	labelNameSet := map[string]struct{}{}
+
 	// First add only the const label names and sort them...
 	for labelName := range constLabels {
+		// zhou: validate label name
 		if !checkLabelName(labelName) {
 			d.err = fmt.Errorf("%q is not a valid label name for metric %q", labelName, fqName)
 			return d
@@ -103,17 +129,25 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 		labelNames = append(labelNames, labelName)
 		labelNameSet[labelName] = struct{}{}
 	}
+	// zhou: sort constLabels' name firstly
 	sort.Strings(labelNames)
+
+	// zhou: keep constLabels' value in same order of constLabels' name.
+
 	// ... so that we can now add const label values in the order of their names.
 	for _, labelName := range labelNames {
 		labelValues = append(labelValues, constLabels[labelName])
 	}
+
+	// zhou: label's value, UTF8 string only
+
 	// Validate the const label values. They can't have a wrong cardinality, so
 	// use in len(labelValues) as expectedNumberOfValues.
 	if err := validateLabelValues(labelValues, len(labelValues)); err != nil {
 		d.err = err
 		return d
 	}
+
 	// Now add the variable label names, but prefix them with something that
 	// cannot be in a regular label name. That prevents matching the label
 	// dimension with a different mix between preset and variable labels.
@@ -122,13 +156,18 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 			d.err = fmt.Errorf("%q is not a valid label name for metric %q", labelName, fqName)
 			return d
 		}
+		// zhou: in order to avoid confliction with constLabels
 		labelNames = append(labelNames, "$"+labelName)
 		labelNameSet[labelName] = struct{}{}
 	}
+
+	// zhou: validate the duplicated label name.
 	if len(labelNames) != len(labelNameSet) {
 		d.err = errors.New("duplicate label names")
 		return d
 	}
+
+	// zhou: Desc.id
 
 	xxh := xxhash.New()
 	for _, val := range labelValues {
@@ -136,6 +175,9 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 		xxh.Write(separatorByteSlice)
 	}
 	d.id = xxh.Sum64()
+
+	// zhou: Desc.dimHash
+
 	// Sort labelNames so that order doesn't matter for the hash.
 	sort.Strings(labelNames)
 	// Now hash together (in this order) the help string and the sorted
@@ -148,6 +190,8 @@ func NewDesc(fqName, help string, variableLabels []string, constLabels Labels) *
 		xxh.Write(separatorByteSlice)
 	}
 	d.dimHash = xxh.Sum64()
+
+	// zhou: convert to "Desc.constLabelPairs"
 
 	d.constLabelPairs = make([]*dto.LabelPair, 0, len(constLabels))
 	for n, v := range constLabels {

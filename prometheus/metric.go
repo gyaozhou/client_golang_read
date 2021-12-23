@@ -28,6 +28,8 @@ import (
 
 var separatorByteSlice = []byte{model.SeparatorByte} // For convenient use with xxhash.
 
+// zhou:
+
 // A Metric models a single sample value with its meta data being exported to
 // Prometheus. Implementations of Metric in this package are Gauge, Counter,
 // Histogram, Summary, and Untyped.
@@ -58,6 +60,8 @@ type Metric interface {
 	// signature of this method should be changed to "Write() (*dto.Metric,
 	// error)".
 }
+
+// zhou:
 
 // Opts bundles the options for creating most Metric types. Each metric
 // implementation XXX has its own XXXOpts type, but in most cases, it is just
@@ -94,6 +98,8 @@ type Opts struct {
 	// https://prometheus.io/docs/instrumenting/writing_exporters/#target-labels-not-static-scraped-labels
 	ConstLabels Labels
 }
+
+// zhou: README,
 
 // BuildFQName joins the given three name components by "_". Empty name
 // components are ignored. If the name parameter itself is empty, an empty

@@ -57,6 +57,8 @@ var gzipPool = sync.Pool{
 	},
 }
 
+// zhou: special case of "HandlerFor()", used for default regitstry.
+
 // Handler returns an http.Handler for the prometheus.DefaultGatherer, using
 // default HandlerOpts, i.e. it reports the first error as an HTTP error, it has
 // no error logging, and it applies compression if requested by the client.
@@ -77,6 +79,10 @@ func Handler() http.Handler {
 	)
 }
 
+// zhou: get an implementation of inteface "http.Handler", which is used to serve http request.
+//       The "prometheus.Gatherer" is a registry, used to generate response by performing on
+//       all registered collectors.
+
 // HandlerFor returns an uninstrumented http.Handler for the provided
 // Gatherer. The behavior of the Handler is defined by the provided
 // HandlerOpts. Thus, HandlerFor is useful to create http.Handlers for custom
@@ -86,6 +92,8 @@ func Handler() http.Handler {
 func HandlerFor(reg prometheus.Gatherer, opts HandlerOpts) http.Handler {
 	return HandlerForTransactional(prometheus.ToTransactionalGatherer(reg), opts)
 }
+
+// zhou: handle "HandlerOpts" upon "Gather()"
 
 // HandlerForTransactional is like HandlerFor, but it uses transactional gather, which
 // can safely change in-place returned *dto.MetricFamily before call to `Gather` and after
@@ -102,6 +110,7 @@ func HandlerForTransactional(reg prometheus.TransactionalGatherer, opts HandlerO
 		)
 	)
 
+	// zhou: limit the conurrent HTTP request processing for this registry.
 	if opts.MaxRequestsInFlight > 0 {
 		inFlightSem = make(chan struct{}, opts.MaxRequestsInFlight)
 	}
@@ -118,18 +127,24 @@ func HandlerForTransactional(reg prometheus.TransactionalGatherer, opts HandlerO
 		}
 	}
 
+	// zhou: "http.HandlerFunc" convert a function not naming ServeHTTP (but with correct signature)
+	//       to be a ServeHTTP() function.
 	h := http.HandlerFunc(func(rsp http.ResponseWriter, req *http.Request) {
+
+		// zhou: has concurrent limit
 		if inFlightSem != nil {
 			select {
 			case inFlightSem <- struct{}{}: // All good, carry on.
 				defer func() { <-inFlightSem }()
 			default:
+				// zhou: reach the concurrent limit of this registry, return 503.
 				http.Error(rsp, fmt.Sprintf(
 					"Limit of concurrent requests reached (%d), try again later.", opts.MaxRequestsInFlight,
 				), http.StatusServiceUnavailable)
 				return
 			}
 		}
+		// zhou: perform each collector "Collect()" within this registry.
 		mfs, done, err := reg.Gather()
 		defer done()
 		if err != nil {
@@ -158,6 +173,9 @@ func HandlerForTransactional(reg prometheus.TransactionalGatherer, opts HandlerO
 		} else {
 			contentType = expfmt.Negotiate(req.Header)
 		}
+
+		// zhou: prepare HTTP header
+
 		header := rsp.Header()
 		header.Set(contentTypeHeader, string(contentType))
 
@@ -220,6 +238,8 @@ func HandlerForTransactional(reg prometheus.TransactionalGatherer, opts HandlerO
 		opts.Timeout,
 	))
 }
+
+// zhou: add metrics to exporter itself.
 
 // InstrumentMetricHandler is usually used with an http.Handler returned by the
 // HandlerFor function. It instruments the provided http.Handler with two
@@ -308,6 +328,8 @@ type Logger interface {
 	Println(v ...interface{})
 }
 
+// zhou: extra options for a registry when serving http request
+
 // HandlerOpts specifies options how to serve metrics via an http.Handler. The
 // zero value of HandlerOpts is a reasonable default.
 type HandlerOpts struct {
@@ -315,13 +337,16 @@ type HandlerOpts struct {
 	// serving metrics. If nil, errors are not logged at all. Note that the
 	// type of a reported error is often prometheus.MultiError, which
 	// formats into a multi-line error string. If you want to avoid the
-	// latter, create a Logger implementation that detects a
+	// latter, create a Logger implementation that denntects a
 	// prometheus.MultiError and formats the contained errors into one line.
 	ErrorLog Logger
 	// ErrorHandling defines how errors are handled. Note that errors are
 	// logged regardless of the configured ErrorHandling provided ErrorLog
 	// is not nil.
 	ErrorHandling HandlerErrorHandling
+
+	// zhou: used to register internal metrics
+
 	// If Registry is not nil, it is used to register a metric
 	// "promhttp_metric_handler_errors_total", partitioned by "cause". A
 	// failed registration causes a panic. Note that this error counter is
@@ -334,14 +359,20 @@ type HandlerOpts struct {
 	// no effect on the HTTP status code because ErrorHandling is set to
 	// ContinueOnError.
 	Registry prometheus.Registerer
+
 	// If DisableCompression is true, the handler will never compress the
 	// response, even if requested by the client.
 	DisableCompression bool
+
+	// zhou: used to limit concurrent HTTP requests processing for this registry,
+	//       This limitation could also be implemented in HTTP server.
+
 	// The number of concurrent HTTP requests is limited to
 	// MaxRequestsInFlight. Additional requests are responded to with 503
 	// Service Unavailable and a suitable message in the body. If
 	// MaxRequestsInFlight is 0 or negative, no limit is applied.
 	MaxRequestsInFlight int
+
 	// If handling a request takes longer than Timeout, it is responded to
 	// with 503 ServiceUnavailable and a suitable Message. No timeout is
 	// applied if Timeout is 0 or negative. Note that with the current

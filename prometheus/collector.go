@@ -13,6 +13,8 @@
 
 package prometheus
 
+// zhou: README,
+
 // Collector is the interface implemented by anything that can be used by
 // Prometheus to collect metrics. A Collector has to be registered for
 // collection. See Registerer.Register.
@@ -25,6 +27,8 @@ package prometheus
 // (i.e. collection of multiple instances of the same Metric but with different
 // label values) like GaugeVec or SummaryVec, and the ExpvarCollector.
 type Collector interface {
+	// zhou: It is not mandatory for send descriptors in Describe().
+
 	// Describe sends the super-set of all possible descriptors of metrics
 	// collected by this Collector to the provided channel and returns once
 	// the last descriptor has been sent. The sent descriptors fulfill the
@@ -94,6 +98,8 @@ func DescribeByCollect(c Collector, descs chan<- *Desc) {
 		descs <- m.Desc()
 	}
 }
+
+// zhou: README,
 
 // selfCollector implements Collector for a single Metric so that the Metric
 // collects itself. Add it as an anonymous field to a struct that implements

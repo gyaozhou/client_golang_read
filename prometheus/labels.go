@@ -64,6 +64,8 @@ func validateValuesInLabels(labels Labels, expectedNumberOfValues int) error {
 	return nil
 }
 
+// zhou: validate the labels' value
+
 func validateLabelValues(vals []string, expectedNumberOfValues int) error {
 	if len(vals) != expectedNumberOfValues {
 		return fmt.Errorf(
@@ -73,6 +75,7 @@ func validateLabelValues(vals []string, expectedNumberOfValues int) error {
 		)
 	}
 
+	// zhou: UTF8 string only.
 	for _, val := range vals {
 		if !utf8.ValidString(val) {
 			return fmt.Errorf("label value %q is not valid UTF-8", val)
@@ -81,6 +84,8 @@ func validateLabelValues(vals []string, expectedNumberOfValues int) error {
 
 	return nil
 }
+
+// zhou: validate label name
 
 func checkLabelName(l string) bool {
 	return model.LabelName(l).IsValid() && !strings.HasPrefix(l, reservedLabelPrefix)

@@ -95,6 +95,8 @@ func (v *valueFunc) Write(out *dto.Metric) error {
 	return populateMetric(v.valType, v.function(), v.labelPairs, nil, out)
 }
 
+// zhou: README,
+
 // NewConstMetric returns a metric with one fixed value that cannot be
 // changed. Users of this package will not have much use for it in regular
 // operations. However, when implementing custom Collectors, it is useful as a
@@ -120,6 +122,8 @@ func NewConstMetric(desc *Desc, valueType ValueType, value float64, labelValues 
 		metric: metric,
 	}, nil
 }
+
+// zhou: README,
 
 // MustNewConstMetric is a version of NewConstMetric that panics where
 // NewConstMetric would have returned an error.

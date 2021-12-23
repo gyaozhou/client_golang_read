@@ -22,6 +22,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
+// zhou: README,
+
 // Counter is a Metric that represents a single numerical value that only ever
 // goes up. That implies that it cannot be used to count items whose number can
 // also go down, e.g. the number of currently running goroutines. Those
@@ -59,6 +61,8 @@ type ExemplarAdder interface {
 // CounterOpts is an alias for Opts. See there for doc comments.
 type CounterOpts Opts
 
+// zhou: README,
+
 // NewCounter creates a new Counter based on the provided CounterOpts.
 //
 // The returned implementation also implements ExemplarAdder. It is safe to
@@ -83,6 +87,9 @@ func NewCounter(opts CounterOpts) Counter {
 	return result
 }
 
+// zhou: README, implements "Metric interface", "selfCollector" will invoke "counter struct"
+//       implementation via "Metric interface".
+
 type counter struct {
 	// valBits contains the bits of the represented float64 value, while
 	// valInt stores values that are exact integers. Both have to go first
@@ -91,6 +98,7 @@ type counter struct {
 	valBits uint64
 	valInt  uint64
 
+	// zhou: "selfCollector struct" implements "Collector interface" !!!
 	selfCollector
 	desc *Desc
 

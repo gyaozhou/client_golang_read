@@ -62,11 +62,30 @@ func main() {
 			Help:    "RPC latency distributions.",
 			Buckets: prometheus.LinearBuckets(*normMean-5**normDomain, .5**normDomain, 20),
 		})
+
+		tGauge1 = prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:        "test_gauge",
+			Namespace:   "test_namespace",
+			Subsystem:   "test_subsystem",
+			Help:        "no help can be found here",
+			ConstLabels: map[string]string{"label1": "value1_1", "label2": "value2_1"},
+		})
+
+		tGauge2 = prometheus.NewGauge(prometheus.GaugeOpts{
+			Name:        "test_gauge",
+			Namespace:   "test_namespace",
+			Subsystem:   "test_subsystem",
+			Help:        "no help can be found here",
+			ConstLabels: map[string]string{"label1": "value1_2", "label2": "value2_2"},
+		})
 	)
 
 	// Register the summary and the histogram with Prometheus's default registry.
 	prometheus.MustRegister(rpcDurations)
 	prometheus.MustRegister(rpcDurationsHistogram)
+	prometheus.MustRegister(tGauge1)
+	prometheus.MustRegister(tGauge2)
+
 	// Add Go module build info.
 	prometheus.MustRegister(collectors.NewBuildInfoCollector())
 
@@ -107,6 +126,15 @@ func main() {
 			v := rand.ExpFloat64() / 1e6
 			rpcDurations.WithLabelValues("exponential").Observe(v)
 			time.Sleep(time.Duration(50*oscillationFactor()) * time.Millisecond)
+		}
+	}()
+
+	// zhou: add for testing
+	go func() {
+		for {
+			tGauge1.Set(rand.Float64())
+			tGauge2.Set(rand.Float64() * 10)
+			time.Sleep(time.Duration(100*oscillationFactor()) * time.Millisecond)
 		}
 	}()
 
